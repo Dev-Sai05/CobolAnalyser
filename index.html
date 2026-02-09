@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>COBOL Flow Visualizer</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+
+    <style>
+        /* 1. Reset body to use 100% of the browser window */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent the page itself from scrolling */
+            display: flex;
+            flex-direction: column;
+            font-family: Arial, sans-serif;
+        }
+
+        h2 { margin: 10px 20px; }
+
+        .controls {
+            padding: 10px 20px;
+            background: #eee;
+            border-bottom: 1px solid #ccc;
+            flex-shrink: 0;
+        }
+
+        /* 2. This container now fills the WHOLE screen below the header */
+        #graph-container {
+            flex-grow: 1; 
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: #fff;
+            overflow: hidden; /* D3 handles movement */
+            cursor: grab;
+        }
+
+        #graph-container:active { cursor: grabbing; }
+
+        /* 3. Force Mermaid SVG to be full-screen capable */
+        .mermaid, .mermaid svg {
+            width: 100% !important;
+            height: 100% !important;
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+
+<h2>COBOL Flow Visualizer</h2>
+
+<div class="controls">
+    <input type="file" id="file" accept=".cbl,.cob">
+    <select id="viewMode">
+        <option value="HIGH_LEVEL">High Level</option>
+        <option value="DETAIL">Detailed</option>
+    </select>
+    <button onclick="generate()">Generate</button>
+    <span style="font-size: 12px; color: #666; margin-left: 10px;">Wheel to Zoom | Drag to Move</span>
+</div>
+
+<div id="graph-container"></div>
+
+<script>
+    mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "loose",
+        flowchart: { useMaxWidth: false } // Essential for zooming
+    });
+
+    function generate() {
+        const fileInput = document.getElementById("file");
+        const viewMode  = document.getElementById("viewMode").value;
+
+        if (!fileInput.files.length) {
+            alert("Please select a COBOL file");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]);
+        formData.append("viewMode", viewMode);
+
+        fetch("/api/flow", {
+            method: "POST",
+            body: formData
+        })
+        .then(res => res.text())
+        .then(mermaidCode => {
+            const container = document.getElementById("graph-container");
+            container.innerHTML = "";
+
+            const graphDiv = document.createElement("div");
+            graphDiv.className = "mermaid";
+            graphDiv.innerHTML = mermaidCode;
+            container.appendChild(graphDiv);
+
+            // Re-render then trigger zoom
+            mermaid.run().then(() => {
+                initFullScreenZoom();
+            });
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Error generating flow");
+        });
+    }
+
+    function initFullScreenZoom() {
+        const svg = d3.select("#graph-container svg");
+        const innerG = svg.select("g");
+
+        const zoom = d3.zoom()
+            .scaleExtent([0.05, 10]) // 5% to 1000% zoom range
+            .on("zoom", (event) => {
+                innerG.attr("transform", event.transform);
+            });
+
+        svg.call(zoom);
+
+        // Center the view initially
+        const container = document.getElementById("graph-container");
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        // Reset transform to center
+        svg.call(zoom.transform, d3.zoomIdentity.translate(width/10, 50).scale(0.9));
+    }
+</script>
+
+</body>
+</html>
